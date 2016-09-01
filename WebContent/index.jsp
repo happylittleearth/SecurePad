@@ -177,6 +177,92 @@ function insertFile(fileData, callback) {
         pre.appendChild(textContent);
       }
 
+
+ function arrayBufferToHexString(arrayBuffer) {
+        var byteArray = new Uint8Array(arrayBuffer);
+        var hexString = "";
+        var nextHexByte;
+
+        for (var i=0; i<byteArray.byteLength; i++) {
+            nextHexByte = byteArray[i].toString(16);
+            if (nextHexByte.length < 2) {
+                nextHexByte = "0" + nextHexByte;
+            }
+            hexString += nextHexByte;
+        }
+        return hexString;
+    }
+    
+    function stringToArrayBuffer(string) {
+        var encoder = new TextEncoder("utf-8");
+        return encoder.encode(string);
+    }
+
+    function deriveAKey() {
+        var saltString = "SecurePadSaltAndPeppa";
+        var iterations = 1000;
+        var hash = "SHA-256";
+
+        var passwordString = document.getElementById("password").value;
+    
+    
+           // First, create a PBKDF2 "key" containing the password
+        window.crypto.subtle.importKey(
+            "raw",
+            stringToArrayBuffer(passwordString),
+            {"name": "PBKDF2"},
+            false,
+            ["deriveKey"]).
+        // Derive a key from the password
+        then(function(baseKey){
+            return window.crypto.subtle.deriveKey(
+                {
+                    "name": "PBKDF2",
+                    "salt": stringToArrayBuffer(saltString),
+                    "iterations": iterations,
+                    "hash": hash
+                },
+                baseKey,
+                {"name": "AES-CBC", "length": 128}, // Key we want
+                true,                               // Extrable
+                ["encrypt", "decrypt"]              // For new key
+                );
+        }).
+        // Export it so we can display it
+        then(function(aesKey) {
+            return window.crypto.subtle.exportKey("raw", aesKey);
+        }).
+        // Display it in hex format
+        then(function(keyBytes) {
+            var hexKey = arrayBufferToHexString(keyBytes);
+            document.getElementById("generatedKey").innerText = hexKey;
+        }).
+        catch(function(err) {
+            alert("Key derivation failed: " + err.message);
+            });
+            
+            
+            
+    
+    }
+    
+    
+document.addEventListener("DOMContentLoaded", function() {
+    "use strict";
+
+    // Check that web crypto is even available
+    if (!window.crypto || !window.crypto.subtle) {
+        alert("Your browser does not support the Web Cryptography API! This page will not work.");
+        return;
+    }
+
+    document.getElementById("btnGenerateKey").addEventListener("click", deriveAKey);
+
+    // Rest of code goes here.
+
+});
+
+
     </script>
 
     <script src="promiz.min.js"></script>
@@ -197,6 +283,7 @@ function insertFile(fileData, callback) {
       <button id="save" onclick="initDocument();">
         Save
       </button><br />
+      Password: <input type="text" id="password" /><span id="generatedKey">None.</span><input type="button" id="btnGenerateKey"  value="Generate Key" /> <br />
 	<textarea rows="25" cols="80" id="padText"></textarea>
 
   </body>
