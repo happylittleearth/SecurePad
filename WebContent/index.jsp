@@ -112,20 +112,28 @@ function insertFile(fileData, callback) {
        * Load Drive API client library.
        */
       function loadDriveApi() {
-        gapi.client.load('drive', 'v3', listFiles);
+        gapi.client.load('drive', 'v3', function(){
+            console.log("Drive API Loaded.");
+        });
         
       }
 
-	  function initDocument() {
+	function initDocument() {
 	  	//var pre = document.getElementById('output');
         //var textContent = document.createTextNode("Google docs initialized." + '\n');
         //pre.appendChild(textContent);
         
-        insertFile(document.getElementById("padText").value, 
-        	function() {
-        		console.log("Upload Complete.");
-        	});
-	  }
+            deriveTheKey().then(function(key) {
+               encrypt(Unibabel.utf8ToBuffer(document.getElementById("padText").value), key).then(function(ecryptedData){
+                    insertFile(ecryptedData, 
+                            function() {
+                                    console.log("Upload Complete.");
+                            });
+
+               }); 
+            });
+        
+	}
 
 	  function downloadFile(fileId) {
 	  
@@ -134,7 +142,19 @@ function insertFile(fileData, callback) {
             'alt':'media'
           }).then (function(jsonResp) {
  				console.log(jsonResp.body);
- 				document.getElementById("padText").value = jsonResp.body;
+ 				//document.getElementById("padText").value = jsonResp.body;
+                                       console.log("hello world.");
+                                        deriveTheKey().then(function(key) {
+                                           decrypt(Unibabel.base64ToBuffer(jsonResp.body), key)
+                                                   .then(function(data){
+                                                    console.log("dt: " + data);
+                                                    document.getElementById("padText").value = data;
+
+                                              }); 
+                                           console.log("key!");
+                                        });
+
+                                
  				window.fileId = fileId;
           }, function(errorResp) { 
           		console.log("Problem fetching file: " + errorResp)}
@@ -260,7 +280,8 @@ function encrypt(data, key) {
     }
 
 
-    function deriveAKey() {
+    
+    function deriveTheKey() {
         var saltString = "SecurePadSaltAndPeppa";
         var iterations = 1000;
         var hash = "SHA-256";
@@ -269,7 +290,7 @@ function encrypt(data, key) {
     
     
            // First, create a PBKDF2 "key" containing the password
-        window.crypto.subtle.importKey(
+        return window.crypto.subtle.importKey(
             "raw",
             Unibabel.utf8ToBuffer(passwordString),
             {"name": "PBKDF2"},
@@ -291,7 +312,8 @@ function encrypt(data, key) {
                 );
                  
                  return key;
-        }).
+        });
+    /*            .
         // Export it so we can display it
         then(function(aesKey) {
             encrypt(Unibabel.utf8ToBuffer(document.getElementById("padText").value), aesKey).then(function (crypted) {
@@ -315,10 +337,15 @@ function encrypt(data, key) {
         catch(function(err) {
             alert("Key derivation failed: " + err.message);
             });
-            
-            
-            
+      */         
+    }
     
+
+    function decryptIt() {
+        
+        listFiles();
+        
+ 
     }
     
     
@@ -331,7 +358,7 @@ document.addEventListener("DOMContentLoaded", function() {
         return;
     }
 
-    document.getElementById("btnGenerateKey").addEventListener("click", deriveAKey);
+    document.getElementById("btnGenerateKey").addEventListener("click", decryptIt);
 
     // Rest of code goes here.
 
@@ -359,7 +386,7 @@ document.addEventListener("DOMContentLoaded", function() {
       <button id="save" onclick="initDocument();">
         Save
       </button><br />
-      Password: <input type="text" id="password" /><span id="generatedKey">None.</span><input type="button" id="btnGenerateKey"  value="Generate Key" /> <br />
+      Password: <input type="password" id="password" /><span id="generatedKey">None.</span><input type="button" id="btnGenerateKey"  value="Load Document" /> <br />
 	<textarea rows="25" cols="80" id="padText"></textarea>
 
   </body>
