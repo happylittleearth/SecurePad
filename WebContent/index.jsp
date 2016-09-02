@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
   <head>
     <script type="text/javascript">
@@ -178,6 +179,71 @@ function insertFile(fileData, callback) {
       }
 
 
+
+var crypto = window.crypto;
+var ivLen = 16; // the IV is always 16 bytes
+function separateIvFromData(buf) {
+  var iv = new Uint8Array(ivLen);
+  var data = new Uint8Array(buf.length - ivLen);
+  Array.prototype.forEach.call(buf, function (byte, i) {
+    if (i < ivLen) {
+      iv[i] = byte;
+    } else {
+      data[i - ivLen] = byte;
+    }
+  });
+  return { iv: iv, data: data };
+}
+
+function decrypt(buf, key) {
+  var parts = separateIvFromData(buf);
+
+  return crypto.subtle.decrypt(
+    { name: 'AES-CBC', iv: parts.iv }
+  , key
+  , parts.data
+  ).then(function (decrypted) {
+    return Unibabel.bufferToUtf8(new Uint8Array(decrypted));
+
+  });
+}
+
+function joinIvAndData(iv, data) {
+  var buf = new Uint8Array(iv.length + data.length);
+  Array.prototype.forEach.call(iv, function (byte, i) {
+    buf[i] = byte;
+  });
+  Array.prototype.forEach.call(data, function (byte, i) {
+    buf[ivLen + i] = byte;
+  });
+  return buf;
+}
+
+function encrypt(data, key) {
+  // a public value that should be generated for changes each time
+  var initializationVector = new Uint8Array(ivLen);
+
+  crypto.getRandomValues(initializationVector);
+
+  return crypto.subtle.encrypt(
+    { name: 'AES-CBC', iv: initializationVector }
+  , key
+  , data
+  ).then(function (encrypted) {
+    var ciphered = joinIvAndData(initializationVector, new Uint8Array(encrypted))
+
+    var base64 = Unibabel.bufferToBase64(ciphered)
+      .replace(/\-/g, '+')
+      .replace(/_/g, '\/')
+      ;
+
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    return base64;
+  });
+}
+
  function arrayBufferToHexString(arrayBuffer) {
         var byteArray = new Uint8Array(arrayBuffer);
         var hexString = "";
@@ -192,11 +258,7 @@ function insertFile(fileData, callback) {
         }
         return hexString;
     }
-    
-    function stringToArrayBuffer(string) {
-        var encoder = new TextEncoder("utf-8");
-        return encoder.encode(string);
-    }
+
 
     function deriveAKey() {
         var saltString = "SecurePadSaltAndPeppa";
@@ -209,16 +271,16 @@ function insertFile(fileData, callback) {
            // First, create a PBKDF2 "key" containing the password
         window.crypto.subtle.importKey(
             "raw",
-            stringToArrayBuffer(passwordString),
+            Unibabel.utf8ToBuffer(passwordString),
             {"name": "PBKDF2"},
             false,
             ["deriveKey"]).
         // Derive a key from the password
         then(function(baseKey){
-            return window.crypto.subtle.deriveKey(
+            var key = window.crypto.subtle.deriveKey(
                 {
                     "name": "PBKDF2",
-                    "salt": stringToArrayBuffer(saltString),
+                    "salt": Unibabel.utf8ToBuffer(saltString),
                     "iterations": iterations,
                     "hash": hash
                 },
@@ -227,9 +289,22 @@ function insertFile(fileData, callback) {
                 true,                               // Extrable
                 ["encrypt", "decrypt"]              // For new key
                 );
+                 
+                 return key;
         }).
         // Export it so we can display it
         then(function(aesKey) {
+            encrypt(Unibabel.utf8ToBuffer(document.getElementById("padText").value), aesKey).then(function (crypted) {
+                 console.log(crypted);
+                 decrypt(Unibabel.base64ToBuffer(crypted), aesKey).then(function(data){
+                     console.log(data);
+                 }).
+        catch(function(err) {
+            console.log("Error: " + err.message);
+            });
+            });
+                
+            
             return window.crypto.subtle.exportKey("raw", aesKey);
         }).
         // Display it in hex format
@@ -267,6 +342,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     <script src="promiz.min.js"></script>
     <script src="webcrypto-shim.js"></script>
+    <script src="unibabel.js"></script>
     <script src="https://apis.google.com/js/client.js?onload=checkAuth">
     </script>
   </head>
